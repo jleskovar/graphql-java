@@ -8,8 +8,6 @@ import graphql.execution.ExecutionContext;
 import graphql.execution.ExecutionStrategy;
 import graphql.language.Field;
 import graphql.schema.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -26,8 +24,6 @@ import static java.util.Collections.singletonList;
  * at a time.
  */
 public class BatchedExecutionStrategy extends ExecutionStrategy {
-
-    private static final Logger log = LoggerFactory.getLogger(BatchedExecutionStrategy.class);
 
     private final BatchedDataFetcherFactory batchingFactory = new BatchedDataFetcherFactory();
 
@@ -268,7 +264,6 @@ public class BatchedExecutionStrategy extends ExecutionStrategy {
             for (int i = 0; i < nodeData.size(); i++) {
                 values.add(null);
             }
-            log.warn("Exception while fetching data", e);
             executionContext.addError(new ExceptionWhileDataFetching(e));
         }
         assert nodeData.size() == values.size();

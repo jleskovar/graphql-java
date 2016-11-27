@@ -6,16 +6,12 @@ import graphql.ExecutionResultImpl;
 import graphql.GraphQLException;
 import graphql.language.Field;
 import graphql.schema.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 import static graphql.introspection.Introspection.*;
 
 public abstract class ExecutionStrategy {
-    private static final Logger log = LoggerFactory.getLogger(ExecutionStrategy.class);
-
     protected ValuesResolver valuesResolver = new ValuesResolver();
     protected FieldCollector fieldCollector = new FieldCollector();
 
@@ -39,7 +35,6 @@ public abstract class ExecutionStrategy {
         try {
             resolvedValue = fieldDef.getDataFetcher().get(environment);
         } catch (Exception e) {
-            log.warn("Exception while fetching data", e);
             executionContext.addError(new ExceptionWhileDataFetching(e));
         }
 

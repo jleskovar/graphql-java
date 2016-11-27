@@ -11,8 +11,6 @@ import graphql.validation.ValidationError;
 import graphql.validation.Validator;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.misc.ParseCancellationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -26,8 +24,6 @@ public class GraphQL {
 
     private final GraphQLSchema graphQLSchema;
     private final ExecutionStrategy executionStrategy;
-
-    private static final Logger log = LoggerFactory.getLogger(GraphQL.class);
 
     public GraphQL(GraphQLSchema graphQLSchema) {
         this(graphQLSchema, null);
@@ -57,7 +53,6 @@ public class GraphQL {
 
     public ExecutionResult execute(String requestString, String operationName, Object context, Map<String, Object> arguments) {
         assertNotNull(arguments, "arguments can't be null");
-        log.debug("Executing request. operation name: {}. Request: {} ", operationName, requestString);
         Parser parser = new Parser();
         Document document;
         try {

@@ -7,8 +7,6 @@ import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.BailErrorStrategy;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.atn.PredictionMode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class Parser {
 
