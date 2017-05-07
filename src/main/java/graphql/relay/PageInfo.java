@@ -1,41 +1,27 @@
 package graphql.relay;
 
+/**
+ * represents a page in relay.
+ */
+public interface PageInfo {
 
-public class PageInfo {
-    private ConnectionCursor startCursor;
-    private ConnectionCursor endCursor;
-    private boolean hasPreviousPage;
-    private boolean hasNextPage;
+    /**
+     * @return cursor to the first edge, or null if this page is empty.
+     */
+    ConnectionCursor getStartCursor();
 
-    public ConnectionCursor getStartCursor() {
-        return startCursor;
-    }
+    /**
+     * @return cursor to the last edge, or null if this page is empty.
+     */
+    ConnectionCursor getEndCursor();
 
-    public void setStartCursor(ConnectionCursor startCursor) {
-        this.startCursor = startCursor;
-    }
+    /**
+     * @return true if and only if this page is not the first page. only meaningful when you gave {@code last} argument.
+     */
+    boolean isHasPreviousPage();
 
-    public ConnectionCursor getEndCursor() {
-        return endCursor;
-    }
-
-    public void setEndCursor(ConnectionCursor endCursor) {
-        this.endCursor = endCursor;
-    }
-
-    public boolean isHasPreviousPage() {
-        return hasPreviousPage;
-    }
-
-    public void setHasPreviousPage(boolean hasPreviousPage) {
-        this.hasPreviousPage = hasPreviousPage;
-    }
-
-    public boolean isHasNextPage() {
-        return hasNextPage;
-    }
-
-    public void setHasNextPage(boolean hasNextPage) {
-        this.hasNextPage = hasNextPage;
-    }
+    /**
+     * @return true if and only if this page is not the last page. only meaningful when you gave {@code first} argument.
+     */
+    boolean isHasNextPage();
 }

@@ -1,42 +1,51 @@
 package graphql.relay;
 
-
 import graphql.schema.DataFetcher;
 import graphql.schema.DataFetchingEnvironment;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-public class SimpleListConnection implements DataFetcher {
+import static java.util.Base64.getDecoder;
+import static java.util.Base64.getEncoder;
+
+public class SimpleListConnection<T> implements DataFetcher<Connection<T>> {
 
     private static final String DUMMY_CURSOR_PREFIX = "simple-cursor";
-    private List<?> data = new ArrayList<Object>();
+    private final String prefix;
+    private final List<T> data;
 
-
-    public SimpleListConnection(List<?> data) {
+    public SimpleListConnection(List<T> data, String prefix) {
+        if (prefix == null || prefix.length() == 0) {
+            throw new IllegalArgumentException("prefix cannot be null or empty");
+        }
+        this.prefix = prefix;
         this.data = data;
-
     }
 
-    private List<Edge> buildEdges() {
-        List<Edge> edges = new ArrayList<Edge>();
+    public SimpleListConnection(List<T> data) {
+        this(data, DUMMY_CURSOR_PREFIX);
+    }
+
+    private List<Edge<T>> buildEdges() {
+        List<Edge<T>> edges = new ArrayList<>();
         int ix = 0;
-        for (Object object : data) {
-            edges.add(new Edge(object, new ConnectionCursor(createCursor(ix++))));
+        for (T object : data) {
+            edges.add(new DefaultEdge<>(object, new DefaultConnectionCursor(createCursor(ix++))));
         }
         return edges;
     }
 
-
     @Override
-    public Object get(DataFetchingEnvironment environment) {
+    public Connection<T> get(DataFetchingEnvironment environment) {
 
-        List<Edge> edges = buildEdges();
+        List<Edge<T>> edges = buildEdges();
 
-
-        int afterOffset = getOffsetFromCursor(environment.<String>getArgument("after"), -1);
+        int afterOffset = getOffsetFromCursor(environment.getArgument("after"), -1);
         int begin = Math.max(afterOffset, -1) + 1;
-        int beforeOffset = getOffsetFromCursor(environment.<String>getArgument("before"), edges.size());
+        int beforeOffset = getOffsetFromCursor(environment.getArgument("before"), edges.size());
         int end = Math.min(beforeOffset, edges.size());
 
         edges = edges.subList(begin, end);
@@ -44,64 +53,68 @@ public class SimpleListConnection implements DataFetcher {
             return emptyConnection();
         }
 
-
         Integer first = environment.<Integer>getArgument("first");
         Integer last = environment.<Integer>getArgument("last");
 
-        ConnectionCursor firstPresliceCursor = edges.get(0).cursor;
-        ConnectionCursor lastPresliceCursor = edges.get(edges.size() - 1).cursor;
+        ConnectionCursor firstPresliceCursor = edges.get(0).getCursor();
+        ConnectionCursor lastPresliceCursor = edges.get(edges.size() - 1).getCursor();
 
         if (first != null) {
             edges = edges.subList(0, first <= edges.size() ? first : edges.size());
         }
         if (last != null) {
-            edges = edges.subList( last > edges.size() ? 0 : edges.size() - last, edges.size());
+            edges = edges.subList(last > edges.size() ? 0 : edges.size() - last, edges.size());
         }
 
-        if (edges.size() == 0) {
+        if (edges.isEmpty()) {
             return emptyConnection();
         }
 
-        Edge firstEdge = edges.get(0);
-        Edge lastEdge = edges.get(edges.size() - 1);
+        Edge<T> firstEdge = edges.get(0);
+        Edge<T> lastEdge = edges.get(edges.size() - 1);
 
-        PageInfo pageInfo = new PageInfo();
-        pageInfo.setStartCursor(firstEdge.getCursor());
-        pageInfo.setEndCursor(lastEdge.getCursor());
-        pageInfo.setHasPreviousPage(!firstEdge.getCursor().equals(firstPresliceCursor));
-        pageInfo.setHasNextPage(!lastEdge.getCursor().equals(lastPresliceCursor));
+        PageInfo pageInfo = new DefaultPageInfo(
+            firstEdge.getCursor(),
+            lastEdge.getCursor(),
+            !firstEdge.getCursor().equals(firstPresliceCursor),
+            !lastEdge.getCursor().equals(lastPresliceCursor)
+        );
 
-        Connection connection = new Connection();
-        connection.setEdges(edges);
-        connection.setPageInfo(pageInfo);
-
-        return connection;
+        return new DefaultConnection<>(
+                edges,
+                pageInfo
+        );
     }
 
-    private Connection emptyConnection() {
-        Connection connection = new Connection();
-        connection.setPageInfo(new PageInfo());
-        return connection;
+    private Connection<T> emptyConnection() {
+        PageInfo pageInfo = new DefaultPageInfo(null, null, false, false);
+        return new DefaultConnection<>(Collections.emptyList(), pageInfo);
     }
 
-
-    public ConnectionCursor cursorForObjectInConnection(Object object) {
+    /**
+     * find the object's cursor, or null if the object is not in this connection.
+     * @param object the object in play
+     * @return a connection cursor
+     */
+    public ConnectionCursor cursorForObjectInConnection(T object) {
         int index = data.indexOf(object);
+        if (index == -1) {
+            return null;
+        }
         String cursor = createCursor(index);
-        return new ConnectionCursor(cursor);
+        return new DefaultConnectionCursor(cursor);
     }
-
 
     private int getOffsetFromCursor(String cursor, int defaultValue) {
-        if (cursor == null) return defaultValue;
-        String string = Base64.fromBase64(cursor);
-        return Integer.parseInt(string.substring(DUMMY_CURSOR_PREFIX.length()));
+        if (cursor == null) {
+            return defaultValue;
+        }
+        String string = new String(getDecoder().decode(cursor), StandardCharsets.UTF_8);
+        return Integer.parseInt(string.substring(prefix.length()));
     }
 
     private String createCursor(int offset) {
-        String string = Base64.toBase64(DUMMY_CURSOR_PREFIX + Integer.toString(offset));
-        return string;
+        byte[] bytes = (prefix + Integer.toString(offset)).getBytes(StandardCharsets.UTF_8);
+        return getEncoder().encodeToString(bytes);
     }
-
-
 }

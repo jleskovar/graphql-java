@@ -35,6 +35,10 @@ class ParserTest extends Specification {
         return new AstComparator().isEqual(node1, node2)
     }
 
+    boolean isEqual(List<Node> node1, List<Node> node2) {
+        return new AstComparator().isEqual(node1, node2)
+    }
+
     def "parse selectionSet for field"() {
         given:
         def input = "{ me { name } }"
@@ -66,7 +70,6 @@ class ParserTest extends Specification {
         Document document = new Parser().parseDocument(input)
         then:
         isEqual(document, expectedResult)
-
     }
 
     def "parse mutation"() {
@@ -78,6 +81,17 @@ class ParserTest extends Specification {
 
         then:
         document.definitions[0].operation == OperationDefinition.Operation.MUTATION
+    }
+
+    def "parse subscription"() {
+        given:
+        def input = 'subscription setName { setName(name: "Homer") { newName } }'
+
+        when:
+        Document document = new Parser().parseDocument(input)
+
+        then:
+        document.definitions[0].operation == OperationDefinition.Operation.SUBSCRIPTION
     }
 
     def "parse field arguments"() {
@@ -303,7 +317,7 @@ class ParserTest extends Specification {
     def "parse complex string value and comment"() {
         given:
         def input = """
-            { # this is some comment, which should be igored
+            { # this is some comment, which should be captured
                hello(arg: "hello, world" ) }
             """
 
@@ -313,6 +327,7 @@ class ParserTest extends Specification {
 
         then:
         isEqual(helloField, new Field("hello", [new Argument("arg", new StringValue("hello, world"))]))
+        helloField.comments.collect { c -> c.content } == [" this is some comment, which should be captured"]
     }
 
     @Unroll
@@ -362,21 +377,32 @@ class ParserTest extends Specification {
         thrown(ParseCancellationException)
     }
 
-    def "mutation without a name"(){
+    def "mutation without a name"() {
         given:
-        def input="""
+        def input = """
         mutation { m }
         """
         when:
         def document = new Parser().parseDocument(input)
         then:
         document.definitions[0].operation == OperationDefinition.Operation.MUTATION
+    }
+
+    def "subscription without a name"(){
+        given:
+        def input="""
+        subscription { s }
+        """
+        when:
+        def document = new Parser().parseDocument(input)
+        then:
+        document.definitions[0].operation == OperationDefinition.Operation.SUBSCRIPTION
 
     }
 
-    def "`'query'` can be used as field name"() {
+    def "keywords can be used as field names"() {
         given:
-        def input = "{ query }"
+        def input = "{ ${name} }"
 
         when:
         Document document = new Parser().parseDocument(input)
@@ -385,6 +411,58 @@ class ParserTest extends Specification {
         document.definitions.size() == 1
         document.definitions[0] instanceof OperationDefinition
         document.definitions[0].operation == OperationDefinition.Operation.QUERY
-        assertField(document.definitions[0] as OperationDefinition, "query")
+        assertField(document.definitions[0] as OperationDefinition, name)
+
+        where:
+        name           | _
+        'fragment'     | _
+        'query'        | _
+        'mutation'     | _
+        'subscription' | _
+        'schema'       | _
+        'scalar'       | _
+        'type'         | _
+        'interface'    | _
+        'implements'   | _
+        'enum'         | _
+        'union'        | _
+        'input'        | _
+        'extend'       | _
+        'directive'    | _
+    }
+
+    def "#352 - incorrect parentheses are detected"() {
+        given:
+        def input = "{profile(id:117) {firstNames, lastNames, frontDegree}}}"
+
+        when:
+        new Parser().parseDocument(input)
+
+        then:
+        def exception = thrown(ParseCancellationException)
+        exception != null
+    }
+
+    def "#352 - lots of incorrect parentheses are detected"() {
+        given:
+        def input = "{profile(id:117) {firstNames, lastNames, frontDegree}}}}}}}}"
+
+        when:
+        new Parser().parseDocument(input)
+
+        then:
+        def exception = thrown(ParseCancellationException)
+        exception != null
+    }
+
+    def "#352 - comments don't count as unused"() {
+        given:
+        def input = "{profile(id:117) {firstNames, lastNames, frontDegree}} #trailing comments don't count"
+
+        when:
+        new Parser().parseDocument(input)
+
+        then:
+        noExceptionThrown()
     }
 }

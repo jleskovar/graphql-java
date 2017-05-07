@@ -1,8 +1,17 @@
 package graphql.execution;
 
 
-import graphql.language.*;
-import graphql.schema.*;
+import graphql.language.Field;
+import graphql.language.FragmentDefinition;
+import graphql.language.FragmentSpread;
+import graphql.language.InlineFragment;
+import graphql.language.Selection;
+import graphql.language.SelectionSet;
+import graphql.schema.GraphQLInterfaceType;
+import graphql.schema.GraphQLObjectType;
+import graphql.schema.GraphQLType;
+import graphql.schema.GraphQLUnionType;
+import graphql.schema.SchemaUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -67,7 +76,7 @@ public class FieldCollector {
         }
         String name = getFieldEntryKey(field);
         if (!fields.containsKey(name)) {
-            fields.put(name, new ArrayList<Field>());
+            fields.put(name, new ArrayList<>());
         }
         fields.get(name).add(field);
     }
@@ -79,6 +88,9 @@ public class FieldCollector {
 
 
     private boolean doesFragmentConditionMatch(ExecutionContext executionContext, InlineFragment inlineFragment, GraphQLObjectType type) {
+        if (inlineFragment.getTypeCondition() == null) {
+            return true;
+        }
         GraphQLType conditionType;
         conditionType = getTypeFromAST(executionContext.getGraphQLSchema(), inlineFragment.getTypeCondition());
         return checkTypeCondition(executionContext, type, conditionType);

@@ -1,33 +1,55 @@
 package graphql.schema;
 
 
+import graphql.language.UnionTypeDefinition;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
-import static graphql.Assert.*;
+import static graphql.Assert.assertNotEmpty;
+import static graphql.Assert.assertNotNull;
+import static graphql.Assert.assertValidName;
 
 public class GraphQLUnionType implements GraphQLType, GraphQLOutputType, GraphQLCompositeType, GraphQLUnmodifiedType, GraphQLNullableType {
 
     private final String name;
     private final String description;
-    private List<GraphQLObjectType> types = new ArrayList<GraphQLObjectType>();
+    private List<GraphQLOutputType> types = new ArrayList<>();
     private final TypeResolver typeResolver;
+    private final UnionTypeDefinition definition;
 
 
-    public GraphQLUnionType(String name, String description, List<GraphQLObjectType> types, TypeResolver typeResolver) {
-        assertNotNull(name, "name can't be null");
+    public GraphQLUnionType(String name, String description, List<GraphQLOutputType> types, TypeResolver typeResolver) {
+        this(name, description, types, typeResolver, null);
+    }
+
+    public GraphQLUnionType(String name, String description, List<GraphQLOutputType> types, TypeResolver typeResolver, UnionTypeDefinition definition) {
+        assertValidName(name);
         assertNotNull(types, "types can't be null");
         assertNotEmpty(types, "A Union type must define one or more member types.");
         assertNotNull(typeResolver, "typeResolver can't be null");
         this.name = name;
         this.description = description;
-        this.types.addAll(types);
+        this.types = types;
         this.typeResolver = typeResolver;
+        this.definition = definition;
     }
 
+    void replaceTypeReferences(Map<String, GraphQLType> typeMap) {
+        this.types = this.types.stream()
+                .map(type -> (GraphQLOutputType) new SchemaUtil().resolveTypeReference(type, typeMap))
+                .collect(Collectors.toList());
+    }
 
-    public List<GraphQLObjectType> getTypes() {
-        return new ArrayList<GraphQLObjectType>(types);
+    /**
+     * @return This returns GraphQLObjectType or GraphQLTypeReference instances, if the type
+     * references are not resolved yet. After they are resolved it contains only GraphQLObjectType.
+     * Reference resolving happens when a full schema is built.
+     */
+    public List<GraphQLOutputType> getTypes() {
+        return new ArrayList<>(types);
     }
 
     public TypeResolver getTypeResolver() {
@@ -43,6 +65,10 @@ public class GraphQLUnionType implements GraphQLType, GraphQLOutputType, GraphQL
         return description;
     }
 
+    public UnionTypeDefinition getDefinition() {
+        return definition;
+    }
+
     public static Builder newUnionType() {
         return new Builder();
     }
@@ -50,8 +76,9 @@ public class GraphQLUnionType implements GraphQLType, GraphQLOutputType, GraphQL
     public static class Builder {
         private String name;
         private String description;
-        private List<GraphQLObjectType> types = new ArrayList<GraphQLObjectType>();
+        private List<GraphQLOutputType> types = new ArrayList<>();
         private TypeResolver typeResolver;
+        private UnionTypeDefinition definition;
 
         public Builder name(String name) {
             this.name = name;
@@ -60,6 +87,11 @@ public class GraphQLUnionType implements GraphQLType, GraphQLOutputType, GraphQL
 
         public Builder description(String description) {
             this.description = description;
+            return this;
+        }
+
+        public Builder definition(UnionTypeDefinition definition) {
+            this.definition = definition;
             return this;
         }
 
@@ -76,6 +108,12 @@ public class GraphQLUnionType implements GraphQLType, GraphQLOutputType, GraphQL
             return this;
         }
 
+        public Builder possibleType(GraphQLTypeReference reference) {
+            assertNotNull(reference, "reference can't be null");
+            types.add(reference);
+            return this;
+        }
+
         public Builder possibleTypes(GraphQLObjectType... type) {
             for (GraphQLObjectType graphQLType : type) {
                 possibleType(graphQLType);
@@ -83,10 +121,15 @@ public class GraphQLUnionType implements GraphQLType, GraphQLOutputType, GraphQL
             return this;
         }
 
-        public GraphQLUnionType build() {
-            return new GraphQLUnionType(name, description, types, typeResolver);
+        public Builder possibleTypes(GraphQLTypeReference... references) {
+            for (GraphQLTypeReference reference : references) {
+                possibleType(reference);
+            }
+            return this;
         }
 
-
+        public GraphQLUnionType build() {
+            return new GraphQLUnionType(name, description, types, typeResolver, definition);
+        }
     }
 }

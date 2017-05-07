@@ -1,29 +1,38 @@
 package graphql.schema;
 
 import graphql.AssertException;
+import graphql.language.InterfaceTypeDefinition;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 
 import static graphql.Assert.assertNotNull;
+import static graphql.Assert.assertValidName;
 
 public class GraphQLInterfaceType implements GraphQLType, GraphQLOutputType, GraphQLFieldsContainer, GraphQLCompositeType, GraphQLUnmodifiedType, GraphQLNullableType {
 
     private final String name;
     private final String description;
-    private final Map<String, GraphQLFieldDefinition> fieldDefinitionsByName = new LinkedHashMap<String, GraphQLFieldDefinition>();
+    private final Map<String, GraphQLFieldDefinition> fieldDefinitionsByName = new LinkedHashMap<>();
     private final TypeResolver typeResolver;
+    private final InterfaceTypeDefinition definition;
 
     public GraphQLInterfaceType(String name, String description, List<GraphQLFieldDefinition> fieldDefinitions, TypeResolver typeResolver) {
-        assertNotNull(name, "name can't null");
+        this(name, description, fieldDefinitions, typeResolver, null);
+    }
+
+    public GraphQLInterfaceType(String name, String description, List<GraphQLFieldDefinition> fieldDefinitions, TypeResolver typeResolver, InterfaceTypeDefinition definition) {
+        assertValidName(name);
         assertNotNull(typeResolver, "typeResolver can't null");
         assertNotNull(fieldDefinitions, "fieldDefinitions can't null");
         this.name = name;
         this.description = description;
         buildDefinitionMap(fieldDefinitions);
         this.typeResolver = typeResolver;
+        this.definition = definition;
     }
 
     private void buildDefinitionMap(List<GraphQLFieldDefinition> fieldDefinitions) {
@@ -41,7 +50,7 @@ public class GraphQLInterfaceType implements GraphQLType, GraphQLOutputType, Gra
 
 
     public List<GraphQLFieldDefinition> getFieldDefinitions() {
-        return new ArrayList<GraphQLFieldDefinition>(fieldDefinitionsByName.values());
+        return new ArrayList<>(fieldDefinitionsByName.values());
     }
 
     public String getName() {
@@ -54,6 +63,10 @@ public class GraphQLInterfaceType implements GraphQLType, GraphQLOutputType, Gra
 
     public TypeResolver getTypeResolver() {
         return typeResolver;
+    }
+
+    public InterfaceTypeDefinition getDefinition() {
+        return definition;
     }
 
     @Override
@@ -74,8 +87,9 @@ public class GraphQLInterfaceType implements GraphQLType, GraphQLOutputType, Gra
     public static class Builder {
         private String name;
         private String description;
-        private List<GraphQLFieldDefinition> fields = new ArrayList<GraphQLFieldDefinition>();
+        private List<GraphQLFieldDefinition> fields = new ArrayList<>();
         private TypeResolver typeResolver;
+        private InterfaceTypeDefinition definition;
 
 
         public Builder name(String name) {
@@ -85,6 +99,11 @@ public class GraphQLInterfaceType implements GraphQLType, GraphQLOutputType, Gra
 
         public Builder description(String description) {
             this.description = description;
+            return this;
+        }
+
+        public Builder definition(InterfaceTypeDefinition definition) {
+            this.definition = definition;
             return this;
         }
 
@@ -105,7 +124,7 @@ public class GraphQLInterfaceType implements GraphQLType, GraphQLOutputType, Gra
          * @param builderFunction a supplier for the builder impl
          * @return this
          */
-        public Builder field(BuilderFunction<GraphQLFieldDefinition.Builder> builderFunction) {
+        public Builder field(UnaryOperator<GraphQLFieldDefinition.Builder> builderFunction) {
             assertNotNull(builderFunction, "builderFunction can't be null");
             GraphQLFieldDefinition.Builder builder = GraphQLFieldDefinition.newFieldDefinition();
             builder = builderFunction.apply(builder);
@@ -136,11 +155,8 @@ public class GraphQLInterfaceType implements GraphQLType, GraphQLOutputType, Gra
         }
 
         public GraphQLInterfaceType build() {
-            return new GraphQLInterfaceType(name, description, fields, typeResolver);
+            return new GraphQLInterfaceType(name, description, fields, typeResolver, definition);
         }
-
-
     }
-
 
 }

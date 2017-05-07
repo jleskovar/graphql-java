@@ -1,7 +1,28 @@
 package graphql.introspection;
 
 
-import graphql.schema.*;
+import graphql.language.AstValueHelper;
+import graphql.language.AstPrinter;
+import graphql.schema.DataFetcher;
+import graphql.schema.DataFetchingEnvironment;
+import graphql.schema.GraphQLArgument;
+import graphql.schema.GraphQLDirective;
+import graphql.schema.GraphQLEnumType;
+import graphql.schema.GraphQLEnumValueDefinition;
+import graphql.schema.GraphQLFieldDefinition;
+import graphql.schema.GraphQLFieldsContainer;
+import graphql.schema.GraphQLInputObjectField;
+import graphql.schema.GraphQLInputObjectType;
+import graphql.schema.GraphQLInputType;
+import graphql.schema.GraphQLInterfaceType;
+import graphql.schema.GraphQLList;
+import graphql.schema.GraphQLNonNull;
+import graphql.schema.GraphQLObjectType;
+import graphql.schema.GraphQLScalarType;
+import graphql.schema.GraphQLSchema;
+import graphql.schema.GraphQLTypeReference;
+import graphql.schema.GraphQLUnionType;
+import graphql.schema.SchemaUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +31,8 @@ import static graphql.Scalars.GraphQLBoolean;
 import static graphql.Scalars.GraphQLString;
 import static graphql.schema.GraphQLArgument.newArgument;
 import static graphql.schema.GraphQLFieldDefinition.newFieldDefinition;
+import static graphql.schema.GraphQLList.list;
+import static graphql.schema.GraphQLNonNull.nonNull;
 import static graphql.schema.GraphQLObjectType.newObject;
 
 public class Introspection {
@@ -38,29 +61,26 @@ public class Introspection {
             .value("NON_NULL", TypeKind.NON_NULL, "Indicates this type is a non-null. `ofType` is a valid field.")
             .build();
 
-    public static DataFetcher kindDataFetcher = new DataFetcher() {
-        @Override
-        public Object get(DataFetchingEnvironment environment) {
-            Object type = environment.getSource();
-            if (type instanceof GraphQLScalarType) {
-                return TypeKind.SCALAR;
-            } else if (type instanceof GraphQLObjectType) {
-                return TypeKind.OBJECT;
-            } else if (type instanceof GraphQLInterfaceType) {
-                return TypeKind.INTERFACE;
-            } else if (type instanceof GraphQLUnionType) {
-                return TypeKind.UNION;
-            } else if (type instanceof GraphQLEnumType) {
-                return TypeKind.ENUM;
-            } else if (type instanceof GraphQLInputObjectType) {
-                return TypeKind.INPUT_OBJECT;
-            } else if (type instanceof GraphQLList) {
-                return TypeKind.LIST;
-            } else if (type instanceof GraphQLNonNull) {
-                return TypeKind.NON_NULL;
-            } else {
-                throw new RuntimeException("Unknown kind of type: " + type);
-            }
+    public static DataFetcher kindDataFetcher = environment -> {
+        Object type = environment.getSource();
+        if (type instanceof GraphQLScalarType) {
+            return TypeKind.SCALAR;
+        } else if (type instanceof GraphQLObjectType) {
+            return TypeKind.OBJECT;
+        } else if (type instanceof GraphQLInterfaceType) {
+            return TypeKind.INTERFACE;
+        } else if (type instanceof GraphQLUnionType) {
+            return TypeKind.UNION;
+        } else if (type instanceof GraphQLEnumType) {
+            return TypeKind.ENUM;
+        } else if (type instanceof GraphQLInputObjectType) {
+            return TypeKind.INPUT_OBJECT;
+        } else if (type instanceof GraphQLList) {
+            return TypeKind.LIST;
+        } else if (type instanceof GraphQLNonNull) {
+            return TypeKind.NON_NULL;
+        } else {
+            throw new RuntimeException("Unknown kind of type: " + type);
         }
     };
 
@@ -68,62 +88,57 @@ public class Introspection {
             .name("__InputValue")
             .field(newFieldDefinition()
                     .name("name")
-                    .type(new GraphQLNonNull(GraphQLString)))
+                    .type(nonNull(GraphQLString)))
             .field(newFieldDefinition()
                     .name("description")
                     .type(GraphQLString))
             .field(newFieldDefinition()
                     .name("type")
-                    .type(new GraphQLNonNull(new GraphQLTypeReference("__Type"))))
+                    .type(nonNull(new GraphQLTypeReference("__Type"))))
             .field(newFieldDefinition()
                     .name("defaultValue")
                     .type(GraphQLString)
-                    .dataFetcher(new DataFetcher() {
-                        @Override
-                        public Object get(DataFetchingEnvironment environment) {
-                            if (environment.getSource() instanceof GraphQLArgument) {
-                                GraphQLArgument inputField = (GraphQLArgument) environment.getSource();
-                                return inputField.getDefaultValue() != null ? inputField.getDefaultValue().toString() : null;
-                            } else if (environment.getSource() instanceof GraphQLInputObjectField) {
-                                GraphQLInputObjectField inputField = (GraphQLInputObjectField) environment.getSource();
-                                return inputField.getDefaultValue() != null ? inputField.getDefaultValue().toString() : null;
-                            }
-                            return null;
+                    .dataFetcher(environment -> {
+                        if (environment.getSource() instanceof GraphQLArgument) {
+                            GraphQLArgument inputField = environment.getSource();
+                            return inputField.getDefaultValue() != null ? print(inputField.getDefaultValue(), inputField.getType()) : null;
+                        } else if (environment.getSource() instanceof GraphQLInputObjectField) {
+                            GraphQLInputObjectField inputField = environment.getSource();
+                            return inputField.getDefaultValue() != null ? print(inputField.getDefaultValue(), inputField.getType()) : null;
                         }
+                        return null;
                     }))
             .build();
+
+    private static String print(Object value, GraphQLInputType type) {
+        return AstPrinter.printAst(AstValueHelper.astFromValue(value, type));
+    }
 
 
     public static GraphQLObjectType __Field = newObject()
             .name("__Field")
             .field(newFieldDefinition()
                     .name("name")
-                    .type(new GraphQLNonNull(GraphQLString)))
+                    .type(nonNull(GraphQLString)))
             .field(newFieldDefinition()
                     .name("description")
                     .type(GraphQLString))
             .field(newFieldDefinition()
                     .name("args")
-                    .type(new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(__InputValue))))
-                    .dataFetcher(new DataFetcher() {
-                        @Override
-                        public Object get(DataFetchingEnvironment environment) {
-                            Object type = environment.getSource();
-                            return ((GraphQLFieldDefinition) type).getArguments();
-                        }
+                    .type(nonNull(list(nonNull(__InputValue))))
+                    .dataFetcher(environment -> {
+                        Object type = environment.getSource();
+                        return ((GraphQLFieldDefinition) type).getArguments();
                     }))
             .field(newFieldDefinition()
                     .name("type")
-                    .type(new GraphQLNonNull(new GraphQLTypeReference("__Type"))))
+                    .type(nonNull(new GraphQLTypeReference("__Type"))))
             .field(newFieldDefinition()
                     .name("isDeprecated")
-                    .type(new GraphQLNonNull(GraphQLBoolean))
-                    .dataFetcher(new DataFetcher() {
-                        @Override
-                        public Object get(DataFetchingEnvironment environment) {
-                            Object type = environment.getSource();
-                            return ((GraphQLFieldDefinition) type).isDeprecated();
-                        }
+                    .type(nonNull(GraphQLBoolean))
+                    .dataFetcher(environment -> {
+                        Object type = environment.getSource();
+                        return ((GraphQLFieldDefinition) type).isDeprecated();
                     }))
             .field(newFieldDefinition()
                     .name("deprecationReason")
@@ -135,110 +150,89 @@ public class Introspection {
             .name("__EnumValue")
             .field(newFieldDefinition()
                     .name("name")
-                    .type(new GraphQLNonNull(GraphQLString)))
+                    .type(nonNull(GraphQLString)))
             .field(newFieldDefinition()
                     .name("description")
                     .type(GraphQLString))
             .field(newFieldDefinition()
                     .name("isDeprecated")
-                    .type(new GraphQLNonNull(GraphQLBoolean))
-                    .dataFetcher(new DataFetcher() {
-                        @Override
-                        public Object get(DataFetchingEnvironment environment) {
-                            GraphQLEnumValueDefinition enumValue = (GraphQLEnumValueDefinition) environment.getSource();
-                            return enumValue.isDeprecated();
-                        }
+                    .type(nonNull(GraphQLBoolean))
+                    .dataFetcher(environment -> {
+                        GraphQLEnumValueDefinition enumValue = environment.getSource();
+                        return enumValue.isDeprecated();
                     }))
             .field(newFieldDefinition()
                     .name("deprecationReason")
                     .type(GraphQLString))
             .build();
 
-    public static DataFetcher fieldsFetcher = new DataFetcher() {
-        @Override
-        public Object get(DataFetchingEnvironment environment) {
-            Object type = environment.getSource();
-            Boolean includeDeprecated = environment.getArgument("includeDeprecated");
-            if (type instanceof GraphQLFieldsContainer) {
-                GraphQLFieldsContainer fieldsContainer = (GraphQLFieldsContainer) type;
-                List<GraphQLFieldDefinition> fieldDefinitions = fieldsContainer.getFieldDefinitions();
-                if (includeDeprecated) return fieldDefinitions;
-                List<GraphQLFieldDefinition> filtered = new ArrayList<GraphQLFieldDefinition>(fieldDefinitions);
-                for (GraphQLFieldDefinition fieldDefinition : fieldDefinitions) {
-                    if (fieldDefinition.isDeprecated()) filtered.remove(fieldDefinition);
-                }
-                return filtered;
+    public static DataFetcher fieldsFetcher = environment -> {
+        Object type = environment.getSource();
+        Boolean includeDeprecated = environment.getArgument("includeDeprecated");
+        if (type instanceof GraphQLFieldsContainer) {
+            GraphQLFieldsContainer fieldsContainer = (GraphQLFieldsContainer) type;
+            List<GraphQLFieldDefinition> fieldDefinitions = fieldsContainer.getFieldDefinitions();
+            if (includeDeprecated) return fieldDefinitions;
+            List<GraphQLFieldDefinition> filtered = new ArrayList<>(fieldDefinitions);
+            for (GraphQLFieldDefinition fieldDefinition : fieldDefinitions) {
+                if (fieldDefinition.isDeprecated()) filtered.remove(fieldDefinition);
             }
-            return null;
+            return filtered;
         }
+        return null;
     };
 
-    public static DataFetcher interfacesFetcher = new DataFetcher() {
-        @Override
-        public Object get(DataFetchingEnvironment environment) {
-            Object type = environment.getSource();
-            if (type instanceof GraphQLObjectType) {
-                return ((GraphQLObjectType) type).getInterfaces();
-            }
-            return null;
+    public static DataFetcher interfacesFetcher = environment -> {
+        Object type = environment.getSource();
+        if (type instanceof GraphQLObjectType) {
+            return ((GraphQLObjectType) type).getInterfaces();
         }
+        return null;
     };
 
-    public static DataFetcher possibleTypesFetcher = new DataFetcher() {
-        @Override
-        public Object get(DataFetchingEnvironment environment) {
-            Object type = environment.getSource();
-            if (type instanceof GraphQLInterfaceType) {
-                return new SchemaUtil().findImplementations(environment.getGraphQLSchema(), (GraphQLInterfaceType) type);
-            }
-            if (type instanceof GraphQLUnionType) {
-                return ((GraphQLUnionType) type).getTypes();
-            }
-            return null;
+    public static DataFetcher possibleTypesFetcher = environment -> {
+        Object type = environment.getSource();
+        if (type instanceof GraphQLInterfaceType) {
+            return new SchemaUtil().findImplementations(environment.getGraphQLSchema(), (GraphQLInterfaceType) type);
         }
+        if (type instanceof GraphQLUnionType) {
+            return ((GraphQLUnionType) type).getTypes();
+        }
+        return null;
     };
 
-    public static DataFetcher enumValuesTypesFetcher = new DataFetcher() {
-        @Override
-        public Object get(DataFetchingEnvironment environment) {
-            Object type = environment.getSource();
-            Boolean includeDeprecated = environment.getArgument("includeDeprecated");
-            if (type instanceof GraphQLEnumType) {
-                List<GraphQLEnumValueDefinition> values = ((GraphQLEnumType) type).getValues();
-                if (includeDeprecated) return values;
-                List<GraphQLEnumValueDefinition> filtered = new ArrayList<GraphQLEnumValueDefinition>(values);
-                for (GraphQLEnumValueDefinition valueDefinition : values) {
-                    if (valueDefinition.isDeprecated()) filtered.remove(valueDefinition);
-                }
-                return filtered;
+    public static DataFetcher enumValuesTypesFetcher = environment -> {
+        Object type = environment.getSource();
+        Boolean includeDeprecated = environment.getArgument("includeDeprecated");
+        if (type instanceof GraphQLEnumType) {
+            List<GraphQLEnumValueDefinition> values = ((GraphQLEnumType) type).getValues();
+            if (includeDeprecated) return values;
+            List<GraphQLEnumValueDefinition> filtered = new ArrayList<>(values);
+            for (GraphQLEnumValueDefinition valueDefinition : values) {
+                if (valueDefinition.isDeprecated()) filtered.remove(valueDefinition);
             }
-            return null;
+            return filtered;
         }
+        return null;
     };
 
-    public static DataFetcher inputFieldsFetcher = new DataFetcher() {
-        @Override
-        public Object get(DataFetchingEnvironment environment) {
-            Object type = environment.getSource();
-            if (type instanceof GraphQLInputObjectType) {
-                return ((GraphQLInputObjectType) type).getFields();
-            }
-            return null;
+    public static DataFetcher inputFieldsFetcher = environment -> {
+        Object type = environment.getSource();
+        if (type instanceof GraphQLInputObjectType) {
+            return ((GraphQLInputObjectType) type).getFields();
         }
+        return null;
     };
 
-    public static DataFetcher OfTypeFetcher = new DataFetcher() {
-        @Override
-        public Object get(DataFetchingEnvironment environment) {
-            Object type = environment.getSource();
-            if (type instanceof GraphQLList) {
-                return ((GraphQLList) type).getWrappedType();
-            }
-            if (type instanceof GraphQLNonNull) {
-                return ((GraphQLNonNull) type).getWrappedType();
-            }
-            return null;
+    public static DataFetcher OfTypeFetcher = environment -> {
+        Object type = environment.getSource();
+        if (type instanceof GraphQLList) {
+            return ((GraphQLList) type).getWrappedType();
         }
+        if (type instanceof GraphQLNonNull) {
+            return ((GraphQLNonNull) type).getWrappedType();
+        }
+        return null;
     };
 
 
@@ -246,7 +240,7 @@ public class Introspection {
             .name("__Type")
             .field(newFieldDefinition()
                     .name("kind")
-                    .type(new GraphQLNonNull(__TypeKind))
+                    .type(nonNull(__TypeKind))
                     .dataFetcher(kindDataFetcher))
             .field(newFieldDefinition()
                     .name("name")
@@ -256,7 +250,7 @@ public class Introspection {
                     .type(GraphQLString))
             .field(newFieldDefinition()
                     .name("fields")
-                    .type(new GraphQLList(new GraphQLNonNull(__Field)))
+                    .type(list(nonNull(__Field)))
                     .argument(newArgument()
                             .name("includeDeprecated")
                             .type(GraphQLBoolean)
@@ -264,15 +258,15 @@ public class Introspection {
                     .dataFetcher(fieldsFetcher))
             .field(newFieldDefinition()
                     .name("interfaces")
-                    .type(new GraphQLList(new GraphQLNonNull(new GraphQLTypeReference("__Type"))))
+                    .type(list(nonNull(new GraphQLTypeReference("__Type"))))
                     .dataFetcher(interfacesFetcher))
             .field(newFieldDefinition()
                     .name("possibleTypes")
-                    .type(new GraphQLList(new GraphQLNonNull(new GraphQLTypeReference("__Type"))))
+                    .type(list(nonNull(new GraphQLTypeReference("__Type"))))
                     .dataFetcher(possibleTypesFetcher))
             .field(newFieldDefinition()
                     .name("enumValues")
-                    .type(new GraphQLList(new GraphQLNonNull(__EnumValue)))
+                    .type(list(nonNull(__EnumValue)))
                     .argument(newArgument()
                             .name("includeDeprecated")
                             .type(GraphQLBoolean)
@@ -280,7 +274,7 @@ public class Introspection {
                     .dataFetcher(enumValuesTypesFetcher))
             .field(newFieldDefinition()
                     .name("inputFields")
-                    .type(new GraphQLList(new GraphQLNonNull(__InputValue)))
+                    .type(list(nonNull(__InputValue)))
                     .dataFetcher(inputFieldsFetcher))
             .field(newFieldDefinition()
                     .name("ofType")
@@ -318,29 +312,45 @@ public class Introspection {
                     .type(GraphQLString))
             .field(newFieldDefinition()
                     .name("locations")
-                    .type(new GraphQLList(new GraphQLNonNull(__DirectiveLocation))))
+                    .type(list(nonNull(__DirectiveLocation)))
+                    .dataFetcher(environment -> {
+                        GraphQLDirective directive = environment.getSource();
+                        return new ArrayList<>(directive.validLocations());
+                    }))
             .field(newFieldDefinition()
                     .name("args")
-                    .type(new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(__InputValue))))
-                    .dataFetcher(new DataFetcher() {
-                        @Override
-                        public Object get(DataFetchingEnvironment environment) {
-                            GraphQLDirective directive = (GraphQLDirective) environment.getSource();
-                            return directive.getArguments();
-                        }
+                    .type(nonNull(list(nonNull(__InputValue))))
+                    .dataFetcher(environment -> {
+                        GraphQLDirective directive = environment.getSource();
+                        return directive.getArguments();
                     }))
             .field(newFieldDefinition()
                     .name("onOperation")
                     .type(GraphQLBoolean)
-                    .deprecate("Use `locations`."))
+                    .deprecate("Use `locations`.")
+                    .dataFetcher(environment -> {
+                        GraphQLDirective directive = environment.getSource();
+                        return directive.isOnOperation();
+                    }))
             .field(newFieldDefinition()
                     .name("onFragment")
                     .type(GraphQLBoolean)
-                    .deprecate("Use `locations`."))
+                    .deprecate("Use `locations`.")
+                    .dataFetcher(environment -> {
+                        GraphQLDirective directive = environment.getSource();
+                        return directive.isOnFragment() ||
+                                (directive.validLocations().contains(DirectiveLocation.INLINE_FRAGMENT)
+                                        && directive.validLocations().contains(DirectiveLocation.FRAGMENT_SPREAD));
+                    }))
             .field(newFieldDefinition()
                     .name("onField")
                     .type(GraphQLBoolean)
-                    .deprecate("Use `locations`."))
+                    .deprecate("Use `locations`.")
+                    .dataFetcher(environment -> {
+                        GraphQLDirective directive = environment.getSource();
+                        return directive.isOnField() ||
+                                directive.validLocations().contains(DirectiveLocation.FIELD);
+                    }))
             .build();
 
     public static GraphQLObjectType __Schema = newObject()
@@ -351,70 +361,48 @@ public class Introspection {
             .field(newFieldDefinition()
                     .name("types")
                     .description("A list of all types supported by this server.")
-                    .type(new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(__Type))))
-                    .dataFetcher(new DataFetcher() {
-                        @Override
-                        public Object get(DataFetchingEnvironment environment) {
-                            GraphQLSchema schema = (GraphQLSchema) environment.getSource();
-                            return schema.getAllTypesAsList();
-                        }
+                    .type(nonNull(list(nonNull(__Type))))
+                    .dataFetcher(environment -> {
+                        GraphQLSchema schema = environment.getSource();
+                        return schema.getAllTypesAsList();
                     }))
             .field(newFieldDefinition()
                     .name("queryType")
                     .description("The type that query operations will be rooted at.")
-                    .type(new GraphQLNonNull(__Type))
-                    .dataFetcher(new DataFetcher() {
-                        @Override
-                        public Object get(DataFetchingEnvironment environment) {
-                            GraphQLSchema schema = (GraphQLSchema) environment.getSource();
-                            return schema.getQueryType();
-                        }
+                    .type(nonNull(__Type))
+                    .dataFetcher(environment -> {
+                        GraphQLSchema schema = environment.getSource();
+                        return schema.getQueryType();
                     }))
             .field(newFieldDefinition()
                     .name("mutationType")
                     .description("If this server supports mutation, the type that mutation operations will be rooted at.")
                     .type(__Type)
-                    .dataFetcher(new DataFetcher() {
-                        @Override
-                        public Object get(DataFetchingEnvironment environment) {
-                            GraphQLSchema schema = (GraphQLSchema) environment.getSource();
-                            return schema.getMutationType();
-                        }
+                    .dataFetcher(environment -> {
+                        GraphQLSchema schema = environment.getSource();
+                        return schema.getMutationType();
                     }))
             .field(newFieldDefinition()
                     .name("directives")
                     .description("'A list of all directives supported by this server.")
-                    .type(new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(__Directive))))
-                    .dataFetcher(new DataFetcher() {
-                        @Override
-                        public Object get(DataFetchingEnvironment environment) {
-                            return environment.getGraphQLSchema().getDirectives();
-                        }
-                    }))
+                    .type(nonNull(list(nonNull(__Directive))))
+                    .dataFetcher(environment -> environment.getGraphQLSchema().getDirectives()))
             .field(newFieldDefinition()
                     .name("subscriptionType")
                     .description("'If this server support subscription, the type that subscription operations will be rooted at.")
                     .type(__Type)
-                    .dataFetcher(new DataFetcher() {
-                        @Override
-                        public Object get(DataFetchingEnvironment environment) {
-                            // Not yet supported
-                            return null;
-                        }
+                    .dataFetcher(environment -> {
+                        GraphQLSchema schema = environment.getSource();
+                        return schema.getSubscriptionType();
                     }))
             .build();
 
 
     public static GraphQLFieldDefinition SchemaMetaFieldDef = newFieldDefinition()
             .name("__schema")
-            .type(new GraphQLNonNull(__Schema))
+            .type(nonNull(__Schema))
             .description("Access the current type schema of this server.")
-            .dataFetcher(new DataFetcher() {
-                @Override
-                public Object get(DataFetchingEnvironment environment) {
-                    return environment.getGraphQLSchema();
-                }
-            }).build();
+            .dataFetcher(DataFetchingEnvironment::getGraphQLSchema).build();
 
     public static GraphQLFieldDefinition TypeMetaFieldDef = newFieldDefinition()
             .name("__type")
@@ -422,25 +410,17 @@ public class Introspection {
             .description("Request the type information of a single type.")
             .argument(newArgument()
                     .name("name")
-                    .type(new GraphQLNonNull(GraphQLString)))
-            .dataFetcher(new DataFetcher() {
-                @Override
-                public Object get(DataFetchingEnvironment environment) {
-                    String name = environment.getArgument("name");
-                    return environment.getGraphQLSchema().getType(name);
-                }
+                    .type(nonNull(GraphQLString)))
+            .dataFetcher(environment -> {
+                String name = environment.getArgument("name");
+                return environment.getGraphQLSchema().getType(name);
             }).build();
 
     public static GraphQLFieldDefinition TypeNameMetaFieldDef = newFieldDefinition()
             .name("__typename")
-            .type(new GraphQLNonNull(GraphQLString))
+            .type(nonNull(GraphQLString))
             .description("The name of the current Object type at runtime.")
-            .dataFetcher(new DataFetcher() {
-                @Override
-                public Object get(DataFetchingEnvironment environment) {
-                    return environment.getParentType().getName();
-                }
-            })
+            .dataFetcher(environment -> environment.getParentType().getName())
             .build();
 
 
