@@ -15,7 +15,7 @@ targetCompatibility = 1.8
 def releaseVersion = System.properties.RELEASE_VERSION
 version = '2.4.0-no-slf4j'
 //version = releaseVersion ? releaseVersion : new SimpleDateFormat('yyyy-MM-dd\'T\'HH-mm-ss').format(new Date())
-group = 'com.graphql-java'
+group = 'com.github.jleskovar'
 
 
 repositories {
